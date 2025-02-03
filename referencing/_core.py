@@ -368,7 +368,7 @@ class Registry(Mapping[URI, Resource[D]]):
         Resources must have a internal IDs (e.g. the :kw:`$id` keyword in
         modern JSON Schema versions), otherwise an error will be raised.
 
-        Both a single resource as well as an iterable of resources works, i.e.:
+        Both a single resource and an iterable of resources works, i.e.:
 
             * ``resource @ registry`` or
 
