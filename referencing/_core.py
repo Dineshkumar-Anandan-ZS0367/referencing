@@ -1,17 +1,14 @@
 from __future__ import annotations
 
+import json
+import os
 from collections.abc import Iterable, Iterator, Sequence
 from enum import Enum
-from typing import Any, Callable, ClassVar, Generic, Protocol
+from typing import Any, Callable, ClassVar, Generic, Protocol, TypeVar
 from urllib.parse import unquote, urldefrag, urljoin
 
 from attrs import evolve, field
 from rpds import HashTrieMap, HashTrieSet, List
-
-try:
-    from typing_extensions import TypeVar
-except ImportError:  # pragma: no cover
-    from typing import TypeVar
 
 from referencing import exceptions
 from referencing._attrs import frozen
@@ -34,10 +31,10 @@ _UNSET = _Unset.SENTINEL
 
 class _MaybeInSubresource(Protocol[D]):
     def __call__(
-        self,
-        segments: Sequence[int | str],
-        resolver: Resolver[D],
-        subresource: Resource[D],
+            self,
+            segments: Sequence[int | str],
+            resolver: Resolver[D],
+            subresource: Resource[D],
     ) -> Resolver[D]: ...
 
 
@@ -54,8 +51,17 @@ def _detect_or_error(contents: D) -> Specification[D]:
     return specification_with(jsonschema_dialect_id)
 
 
+def load_json(file_name: str) -> dict:
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(script_dir, file_name)
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"File '{file_name}' not found in {script_dir}")
+    with open(file_path, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
 def _detect_or_default(
-    default: Specification[D],
+        default: Specification[D],
 ) -> Callable[[D], Specification[D]]:
     def _detect(contents: D) -> Specification[D]:
         if not isinstance(contents, Mapping):
@@ -77,9 +83,9 @@ def _detect_or_default(
 
 class _SpecificationDetector:
     def __get__(
-        self,
-        instance: Specification[D] | None,
-        cls: type[Specification[D]],
+            self,
+            instance: Specification[D] | None,
+            cls: type[Specification[D]],
     ) -> Callable[[D], Specification[D]]:
         if instance is None:
             return _detect_or_error
@@ -166,6 +172,7 @@ class Specification(Generic[D]):
         """
         Create a resource which is interpreted using this specification.
         """
+        print(contents)
         return Resource(contents=contents, specification=self)
 
 
@@ -194,11 +201,11 @@ class Resource(Generic[D]):
 
     @classmethod
     def from_contents(
-        cls,
-        contents: D,
-        default_specification: (
-            type[Specification[D]] | Specification[D]
-        ) = Specification,
+            cls,
+            contents: D,
+            default_specification: (
+                    type[Specification[D]] | Specification[D]
+            ) = Specification,
     ) -> Resource[D]:
         """
         Create a resource guessing which specification applies to the contents.
@@ -212,7 +219,9 @@ class Resource(Generic[D]):
                 specification they identify as
 
         """
+        # print(contents)
         specification = default_specification.detect(contents)
+
         return specification.create_resource(contents=contents)
 
     @classmethod
@@ -350,8 +359,8 @@ class Registry(Mapping[URI, Resource[D]]):
         return len(self._resources)
 
     def __rmatmul__(
-        self,
-        new: Resource[D] | Iterable[Resource[D]],
+            self,
+            new: Resource[D] | Iterable[Resource[D]],
     ) -> Registry[D]:
         """
         Create a new registry with resource(s) added using their internal IDs.
@@ -427,8 +436,8 @@ class Registry(Mapping[URI, Resource[D]]):
         try:
             resource = registry._retrieve(uri)
         except (
-            exceptions.CannotDetermineSpecification,
-            exceptions.NoSuchResource,
+                exceptions.CannotDetermineSpecification,
+                exceptions.NoSuchResource,
         ):
             raise
         except Exception as error:
@@ -485,7 +494,34 @@ class Registry(Mapping[URI, Resource[D]]):
         """
         Retrieve the (already crawled) contents identified by the given URI.
         """
-        return self[uri].contents
+
+        file_path = self.extract_schema_version(uri).strip()
+        print(f"Loading json file {file_path}")
+
+        if file_path == "_03":
+            data = load_json(f"{file_path}.json")
+        elif file_path == "_04":
+            data = load_json(f"{file_path}.json")
+        elif file_path == "_07":
+            data = load_json(f"{file_path}.json")
+        elif file_path == "_06":
+            data = load_json(f"{file_path}.json")
+        else:
+            data = load_json(f"{file_path}.json")
+
+        return data
+
+    def extract_schema_version(self, uri: str) -> str:
+        parts = uri.split('/')
+        for part in parts:
+            if part.startswith("draft-"):
+                version = part[len("draft-"):]  # Remove "draft-" prefix
+                version_parts = version.split('-')
+                if len(version_parts) == 2:
+                    return f"{version_parts[0]}_{version_parts[1]}"  # Use underscore if month is present
+                return f"_{version_parts[0]}"  # Use dash if only the year is present
+
+        return "2022_02"
 
     def crawl(self) -> Registry[D]:
         """
@@ -518,8 +554,8 @@ class Registry(Mapping[URI, Resource[D]]):
         return self.with_resources([(uri, resource)])
 
     def with_resources(
-        self,
-        pairs: Iterable[tuple[URI, Resource[D]]],
+            self,
+            pairs: Iterable[tuple[URI, Resource[D]]],
     ) -> Registry[D]:
         r"""
         Add the given `Resource`\ s to the registry, without crawling them.
@@ -535,9 +571,9 @@ class Registry(Mapping[URI, Resource[D]]):
         return evolve(self, resources=resources, uncrawled=uncrawled)
 
     def with_contents(
-        self,
-        pairs: Iterable[tuple[URI, D]],
-        **kwargs: Any,
+            self,
+            pairs: Iterable[tuple[URI, D]],
+            **kwargs: Any,
     ) -> Registry[D]:
         r"""
         Add the given contents to the registry, autodetecting when necessary.
@@ -562,8 +598,8 @@ class Registry(Mapping[URI, Resource[D]]):
             anchors = anchors.update(registry._anchors)
             uncrawled = uncrawled.update(registry._uncrawled)
 
-            if registry._retrieve is not _fail_to_retrieve:  # type: ignore[reportUnnecessaryComparison] ???
-                if registry._retrieve is not retrieve is not _fail_to_retrieve:  # type: ignore[reportUnnecessaryComparison] ???
+            if registry._retrieve is not _fail_to_retrieve:
+                if registry._retrieve is not retrieve is not _fail_to_retrieve:
                     raise ValueError(  # noqa: TRY003
                         "Cannot combine registries with conflicting retrieval "
                         "functions.",
@@ -595,12 +631,7 @@ class Registry(Mapping[URI, Resource[D]]):
 
 
 #: An anchor or resource.
-AnchorOrResource = TypeVar(
-    "AnchorOrResource",
-    AnchorType[Any],
-    Resource[Any],
-    default=Resource[Any],
-)
+AnchorOrResource = TypeVar("AnchorOrResource", AnchorType[Any], Resource[Any])
 
 
 @frozen
